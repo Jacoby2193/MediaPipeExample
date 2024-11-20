@@ -115,4 +115,19 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	void Disconnect();
+
+
+	uint32 Size;
+	int32 headerSize = 4;
+
+	TArray<uint8> headerData;
+	TArray<uint8> ReceivedData;
+
+	// 데이터 수신
+	int32 BytesRead = 0;
+	int32 packetSize = 0;
+	int32 cmd = 0;
+	// 헤더 분석
+	int checkRead = headerSize;
+
 };
