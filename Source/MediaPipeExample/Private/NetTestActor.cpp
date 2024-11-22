@@ -11,7 +11,6 @@
 #include "cstdlib"
 #include "cstdlib"
 #include "GameFramework/Controller.h"
-#include "MyPlayerController.h"
 
 ANetTestActor::ANetTestActor()
 {
