@@ -8,6 +8,10 @@
 #include "Sockets.h"
 #include "SocketSubsystem.h"
 #include "Interfaces/IPv4/IPv4Address.h" 
+#include "cstdlib"
+#include "cstdlib"
+#include "GameFramework/Controller.h"
+#include "MyPlayerController.h"
 
 ANetTestActor::ANetTestActor()
 {
@@ -17,6 +21,12 @@ ANetTestActor::ANetTestActor()
 void ANetTestActor::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void ANetTestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+	Disconnect();
 }
 
 void ANetTestActor::Tick(float DeltaTime)
@@ -46,59 +56,47 @@ void ANetTestActor::CreateClient(FString ip, int32 port)
 
 void ANetTestActor::ReceiveData()
 {
-	if (ClientSocket&&ClientSocket->GetConnectionState()==SCS_Connected)
-	{
+	uint32 pendingSize;
+	int32 headerSize = 4;
 
-	}
-	else
+	TArray<uint8> headerData;
+	TArray<uint8> bodyData;
+
+	// 데이터 수신
+	int32 bytesRead = 0;
+	int32 packetSize = 0;
+	int32 cmd = 0;
+	// 헤더 분석
+	int checkRead = headerSize;
+
+	if (nullptr == ClientSocket ||
+		ClientSocket->GetConnectionState() != SCS_Connected || 
+		!ClientSocket->HasPendingData(pendingSize))
 	{
-		GEngine->AddOnScreenDebugMessage(-1, -1.f, FColor::Red, TEXT("Socket is not connected or does not exist."));
 		return;
 	}
-
-	if (!ClientSocket->HasPendingData(Size))
-	{
-		return;
-	}
-
-	//GEngine->AddOnScreenDebugMessage(-1, -1.f, FColor::Green, FString::Printf(TEXT("연결성공 : 데이터 확인 %d"), ClientSocket->HasPendingData(Size)));
 
 	headerData.Empty(headerSize);
 	headerData.SetNum(headerSize);
 	// 데이터 수신
-	BytesRead = 0;
+	bytesRead = 0;
 	packetSize = 0;
 	cmd = 0;
 	// 헤더 분석
-	checkRead = headerSize;
-	while (checkRead > 0)
-	{
-		if (ClientSocket->Recv(headerData.GetData(), headerData.Num(), BytesRead))
-		{
-			checkRead -= BytesRead;
-		}
-	}
+	ClientSocket->Recv(headerData.GetData(), headerData.Num(), bytesRead);
 	cmd = headerData[2];
 	packetSize = headerData[3];
 
 	// 바디 분석
-	ReceivedData.Empty(packetSize);
-	ReceivedData.SetNum(packetSize);
+	bodyData.Empty(packetSize);
+	bodyData.SetNum(packetSize);
 	checkRead = packetSize;
-	while (checkRead > 0)
-	{
-		if (ClientSocket->Recv(ReceivedData.GetData(), ReceivedData.Num(), BytesRead))
-		{
-			checkRead -= BytesRead;
-		}
-	}
-	int32 x = ReceivedData[0]<<24|ReceivedData[1]<<16|ReceivedData[2]<<8|ReceivedData[3];
-	int32 y = ReceivedData[4]<<24|ReceivedData[5]<<16|ReceivedData[6]<<8|ReceivedData[7];
-	FString ReceivedString = FString::Printf(TEXT("x : %d, y : %d"), x, y);
+	ClientSocket->Recv(bodyData.GetData(), bodyData.Num(), bytesRead);
+	int32 f1 = bodyData[0]<<24|bodyData[1]<<16|bodyData[2]<<8|bodyData[3];
+	int32 f2 = bodyData[4]<<24|bodyData[5]<<16|bodyData[6]<<8|bodyData[7];
+	FString ReceivedString = FString::Printf(TEXT("f1 : %d, f2 : %d"), f1, f2);
 
-	//FString ReceivedString = FString(ReceivedData.Num(), UTF8_TO_TCHAR(ReceivedData.GetData()));
-
-	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Green, FString::Printf(TEXT("BytesRead : %d, Received: %s"), BytesRead, *ReceivedString));
+	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Green, FString::Printf(TEXT("BytesRead : %d, Received: %s"), bytesRead, *ReceivedString));
 }
 
 void ANetTestActor::Disconnect()
@@ -112,52 +110,6 @@ void ANetTestActor::Disconnect()
 	else
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, TEXT("소켓 없음"));
-	}
-
-}
-
-void ANetTestActor::TestRecieveData()
-{
-	if (!ClientSocket)
-		return;
-
-	// uint32 pendingSize;
-	// if (!ClientSocket->HasPendingData(pendingSize) )
-	// {
-	// 	return;
-	// }
-
-	TArray<uint8> headerInfo;
-	int32 HeaderSize = 1;
-	headerInfo.AddZeroed(HeaderSize);
-
-	int readNum = 0;
-
-	bool bSuccess = ClientSocket->Recv(headerInfo.GetData(), HeaderSize, readNum, ESocketReceiveFlags::Type::WaitAll);
-
-	if (readNum>0)
-	{
-		TArray<uint8> BodyInfo;
-		int32 BodySize = headerInfo[0];
-		BodyInfo.AddZeroed(HeaderSize);
-
-		int32 Offset = 0;
-		uint8* results = BodyInfo.GetData();
-		while (BodySize>0)
-		{
-			int32 NumRead = 0;
-			ClientSocket->Recv(results+Offset, BodySize, NumRead);
-
-			if (NumRead<=0)
-			{
-				break;
-			}
-
-			Offset += NumRead;
-			BodySize -= NumRead;
-		}
-
-		GEngine->AddOnScreenDebugMessage(-1, -1.f, FColor::Green, FString::Printf(TEXT("데이터 확인 %d"), BodyInfo[0]));
 	}
 
 }

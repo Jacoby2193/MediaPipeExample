@@ -4,6 +4,8 @@ import socket
 import threading
 import time
 
+from numpy.ma.core import append
+
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
@@ -13,8 +15,7 @@ TCP_PORT = 23458  # 서버 포트 번호
 BUFFER_SIZE = 1024
 
 # 클라이언트 설정
-#CLIENT_TCP_IP = '192.168.1.59'  # 서버 IP 주소
-CLIENT_TCP_IP = '192.168.0.53'
+CLIENT_TCP_IP = '192.168.0.53' # 서버 IP 주소
 CLIENT_TCP_PORT = 23458  # 서버 포트 번호
 
 clients = []
@@ -27,15 +28,17 @@ def handle_client(conn, addr):
 
     try:
         while True:  # 클라이언트와 데이터 통신
-            data = conn.recv(BUFFER_SIZE).decode()
+            data = conn.recv(BUFFER_SIZE)
             if not data:
                 break
-            print(f"받은 데이터: {data}")
+            f1 = data[4] << 24 | data[5] << 16 | data[6] << 8 | data[7]
+            f2 = data[8] << 24 | data[9] << 16 | data[10] << 8 | data[11]
+            print(f"받은 데이터: {data}, f1 : {f1}, f2 : {f2}")
 
             # 모든 클라이언트에 데이터 전송
             for client in clients:
                 if client != conn:  # 데이터를 보낸 클라이언트를 제외
-                    client.send(data.encode())
+                    client.send(data)
     finally:
         conn.close()  # 클라이언트와의 연결 종료
         clients.remove(conn)  # 클라이언트 리스트에서 제거
@@ -55,8 +58,6 @@ def start_server():
         threading.Thread(target=handle_client, args=(conn, addr)).start()
 
     server_socket.close()  # 서버 소켓 종료
-
-
 
 
 cap = cv2.VideoCapture(0)
@@ -84,34 +85,41 @@ def client_process():
 
             # image.flags.writeable = False
 
-            packet = []
-            packetSize = 0
+            packet = bytearray(12)
+            packet[0] = 0xff
+            packet[1] = 0xff
+            packet_body_length = 8
+            packet_command_no = 1
+            packet[2] = packet_command_no
+            packet[3] = packet_body_length
 
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
                     finger1 = int(hand_landmarks.landmark[4].x * 100)
                     finger2 = int(hand_landmarks.landmark[8].x * 100)
-                    packet.append(finger1)
-                    packet.append(finger2)
+
+                    packet[4] = (finger1 >> 24) & 0xff
+                    packet[5] = (finger1 >> 16) & 0xff
+                    packet[6] = (finger1 >> 8) & 0xff
+                    packet[7] = finger1 & 0xff
+
+                    packet[8] = (finger2 >> 24) & 0xff
+                    packet[9] = (finger2 >> 16) & 0xff
+                    packet[10] = (finger2 >> 8) & 0xff
+                    packet[11] = finger2 & 0xff
+
                     dist = abs(finger1 - finger2)
                     cv2.putText(
                         image, text='f1=%d f2=%d dist=%d ' % (finger1, finger2, dist), org=(10, 30),
                         fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1,
                         color=255, thickness=3)
 
-                    mp_drawing.draw_landmarks(
-                        image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                    mp_drawing.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
             if time.time() - send_time > 1:
                 print('send!')
                 send_time = time.time()
-
-                message = "11"
-                client_socket.send(message.encode(),)
-                # print("Hand opened after being closed, sent:", message)
-
-                # client_socket.send(bytes(packet))
-
+                client_socket.send(bytearray(packet))
 
             cv2.imshow('image', image)
             if cv2.waitKey(1) == ord('q'):
